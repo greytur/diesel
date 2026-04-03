@@ -5,7 +5,7 @@
 import os, time
 # from modules.builder.old_builder import autobuilder
 # from modules.builder.old_builder_v2 import builder
-from build.aggregator import builder, autobuilder
+from builder.aggregator import aggregate, auto_aggregate
 
 from .tools import save_json, hex_uuid
 
@@ -46,8 +46,8 @@ if __name__ == "__main__":
         if not os.path.isdir(output_dir):
             raise NotADirectoryError(output_dir)
     _timestart = time.time()
-    #result = autobuilder(cache_dir=cache_dir)
-    result = builder(cache_dir=cache_dir)
+    #result = auto_aggregate(cache_dir=cache_dir)
+    result = aggregate(cache_dir=cache_dir)
     _timestop  = time.time()
     if FLAGS["print_timed"]:
         print(f"Finished in: ({_timestop - _timestart})")

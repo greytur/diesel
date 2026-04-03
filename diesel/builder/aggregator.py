@@ -1,5 +1,5 @@
-# /diesel/aggregator/aggregator.py
-# Aggregates everything for the `build` system
+# /diesel/builder/aggregator.py
+# Aggregates everything for the `builder` system
 
 # ===== IMPORTS =====
 from typing import *  # type: ignore
@@ -13,7 +13,6 @@ import os
 import re
 # >> Local Imports
 from tools import *
-# from .build_config import *
 
 # ===== LOGGING SETUP =====
 logger = get_logger(level=logging.INFO)
@@ -36,19 +35,20 @@ def prefix_pattern_maker(prefixes: Union[str, Iterable[str]]) -> re.Pattern:
         return prefix_pattern_maker('|'.join(prefixes))
     raise TypeError("Expected str or Iterable[str].", prefixes)
 
-# ===== AUTOBUILDER CONFIGURATION =====
-tables = {
-    "color": [
-        {"prefix": "mvThemeCol_",       "category": 0},
-        {"prefix": "mvPlotCol_",        "category": 1},
-        {"prefix": "mvNodeCol_",        "category": 2}
-    ],"style": [
-        {"prefix": "mvStyleVar_",       "category": 0},
-        {"prefix": "mvPlotStyleVar_",   "category": 1},
-        {"prefix": "mvNodeStyleVar_",   "category": 2},
-        {"prefix": "mvNodesStyleVar_",  "category": 2}      # spelling error has to be accounted for, an extra 's' was added on some of the names
-    ]
-}
+# ===== AUTO-AGGREGATOR CONFIGURATION =====
+# BUG: Removed, old duplicate
+# tables = {
+#     "color": [
+#         {"prefix": "mvThemeCol_",       "category": 0},
+#         {"prefix": "mvPlotCol_",        "category": 1},
+#         {"prefix": "mvNodeCol_",        "category": 2}
+#     ],"style": [
+#         {"prefix": "mvStyleVar_",       "category": 0},
+#         {"prefix": "mvPlotStyleVar_",   "category": 1},
+#         {"prefix": "mvNodeStyleVar_",   "category": 2},
+#         {"prefix": "mvNodesStyleVar_",  "category": 2}      # spelling error has to be accounted for, an extra 's' was added on some of the names
+#     ]
+# }
 REFRENCE = {
     ""
     "specs": {
@@ -202,6 +202,7 @@ DOCSTRING_MAPS = [
 # ===== GLOBAL VARIABLES =====
 dpg_members = inspect.getmembers(dpg)
 # >>> Tables & Lambda Lookups
+# 
 theme_kinds = re.compile(r'mv(Style|Theme|Plot|Node|Nodes)(?:Style)?(Col|Var)_(.*)')
 mine = re.fullmatch(r'mv(Style|Theme|Plot|Node|Nodes)(Col|StyleVar)_(.*)', dpg_members[0][1])
 
@@ -210,7 +211,7 @@ tables = {
         {"prefix": "mvThemeCol_",       "category": 0},
         {"prefix": "mvPlotCol_",        "category": 1},
         {"prefix": "mvNodeCol_",        "category": 2},
-        {"prefix": "mvNodesCol_",       "category": 2}
+        {"prefix": "mvNodesCol_",       "category": 2}      # spelling error has to be accounted for, an extra 's' was added on some of the names
     ],"style": [
         {"prefix": "mvStyleVar_",       "category": 0},
         {"prefix": "mvPlotStyleVar_",   "category": 1},
@@ -284,7 +285,7 @@ pixel_style_lookup = ( # used by `get_style_uses_pixels()`
     ('size', 'weight')
 )
 
-# >>> >>> Autobuilder Configuration Functions
+# >>> >>> Auto-Aggregator Configuration Functions
 def get_style_uses_pixels(style_dss_name: str) -> bool:
     """ Returns if the DearPyGui style, in **DSS** name format (kebab-case), uses pixels in practice as an implied unit of measurement.\nSpecific to styles. """
     if contains_any(style_dss_name, pixel_style_lookup[0]): # mvNodeStyleVar_PinTriangleSideLength before ANGLE triggers as false
@@ -305,7 +306,7 @@ def get_style_num_args(style_im_name: str, category: int, item_value: int) -> in
             return 2 
     return 1 # mvNode(s)StyleVar & Remaining
 
-# >>> Builder Config
+# >>> Aggregator Config
 CONFIG = {
     "external_refs": [
         {
@@ -358,11 +359,9 @@ CONFIG = {
         }
     ]
 }
-# >>> Builder Functions
+# >>> Aggregator Functions
 def collect_external_refs(external_refs, cache_dir=None):
-    """
-    Collects 
-    """
+    """ Collects external refrences from a cache directory or using the URLs from `external_refs` """
     collected_refs = {}
     is_cache_stable = True if (isinstance(cache_dir, str)) else False # Used to toggle caching, mainly from NotADirectoryError and FileNotFoundError
     for ref in external_refs:
@@ -441,20 +440,25 @@ def collect_external_refs(external_refs, cache_dir=None):
 
 
 
-# >>> Builder Function
-def builder(cache_dir=None):
+# >>> Aggregator Function
+def aggregate(cache_dir=None):
+    # Setup
     counter = UniqueCounter()
     dpg_members = inspect.getmembers(dpg)
     external_refrences = collect_external_refs(CONFIG["external_refs"], cache_dir=cache_dir)
+    aggr_results = {
+        "styles": [],
+        "colors": [],
+        "widgets":[]
+    }
 
-    
     pass
 
-# >>> Autobuilder Function
-def autobuilder(cache_dir=None):
+# >>> Auto Aggregator Function
+def auto_aggregate(cache_dir=None):
     # Prefix REGEX patterns for colors and styles
     color_re_pattern, style_re_pattern = (prefix_pattern_maker([subitem['prefix'] for subitem in tables[tname]]) for tname in ('color','style'))
-    build_results = {
+    results = {
         "styles": [],
         "colors": [],
         "widgets":[]
@@ -462,7 +466,7 @@ def autobuilder(cache_dir=None):
     id_counter = UniqueCounter() 
     # XXX: STAGE__INSPECT --> Inspect the DPG Module for members and Sort them
     for item_name, item_value in dpg_members:
-        # STYLE AUTOBUILDER
+        # STYLE
         if style_re_pattern.match(item_name):
             for table_row in tables[ (object_kind := "style") ]:
                 if item_name.startswith(prefix := table_row["prefix"]):
@@ -471,7 +475,7 @@ def autobuilder(cache_dir=None):
                     category = table_row["category"]
                     num_args = get_style_num_args(imname_item_name, category, item_value)
 
-                    build_results["styles"].append(
+                    results["styles"].append(
                         {
                             "kind":         object_kind, # What kind of object is it? 
                             "dpg":          item_name,   # What is the DPG-assigned name of the item?
@@ -487,7 +491,7 @@ def autobuilder(cache_dir=None):
                             }
                         }
                     )
-        # COLOR AUTOBUILDER
+        # COLOR 
         elif color_re_pattern.match(item_name):
             for table_row in tables[ (object_kind := "color") ]:
                 if item_name.startswith(prefix := table_row["prefix"]):
@@ -501,7 +505,7 @@ def autobuilder(cache_dir=None):
                             kebab_item_name = val_name_changer(kebab_item_name)
                             break # Name has been changed once, immediatly exit loop
 
-                    build_results["colors"].append(
+                    results["colors"].append(
                         {
                             "kind":         object_kind,
                             "dpg":          item_name,
@@ -517,7 +521,7 @@ def autobuilder(cache_dir=None):
     # Advanced Information Steps – Things like docstrings, default values, and constraints!
     # ======= PARSING SETUP CODE =======
     all_style_imnames = [set({}), set({}), set({})]
-    for style_object in build_results['styles']:
+    for style_object in results['styles']:
         all_style_imnames[style_object['category']].add(style_object['im_name'])
     # ======= IMGUI DATA PARSING =======
     valid_imnames = all_style_imnames
@@ -594,7 +598,7 @@ def autobuilder(cache_dir=None):
     
     # ======= UPDATING BUILD RESULTS =======
     # parsed_data = [imgui_parsed_data, implot_parsed_data, imnode_parsed_data]
-    for index, item in enumerate(build_results["styles"]):
+    for index, item in enumerate(results["styles"]):
         iname = item['im_name']
         target_data = dict()
         for style_item in parsed_data[item['category']]:
@@ -608,7 +612,7 @@ def autobuilder(cache_dir=None):
         item['configuration']['value_type'] = target_data['type']
         item['configuration']['docstring'] = target_data['docstring'] 
         item['configuration']['default'] = target_data['default_value']
-        build_results['styles'][index] = item
+        results['styles'][index] = item
     
     # === Widget Parsing ===
     # def get_documents()
@@ -638,16 +642,12 @@ def autobuilder(cache_dir=None):
     #         }
     #     }
 
-    return build_results
+    return results
 
-
-
-# FILESTORE = ".../march_code/diesel/tools/indev/tests/localstore" # BUG: REMOVED FULL PATH
-#import pyperclip
 
 
 __all__ = [
-    "to_kebab_case", "autobuilder", "get_style_num_args", "prefix_pattern_maker",
+    "to_kebab_case", "aggregate", "get_style_num_args", "prefix_pattern_maker",
     "STYLE_SPECS", "VALID_TYPES", "DOCSTRING_MAPS", 
     "dpg_members", "tables", "color_name_conversion_table"
 
