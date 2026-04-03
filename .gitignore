@@ -1,8 +1,6 @@
 # ======================
 # ======= Custom =======
 # ======================
-cache/*
-!cache/.gitkeep
 docs/*
 legacy_code/*
 
