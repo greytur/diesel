@@ -4,6 +4,7 @@ import logging
 import sys
 import os
 
+
 USE_COLOR = sys.platform != "win32" or "ANSICON" in os.environ
 
 class PadLvlWithFormatter(logging.Formatter):
@@ -50,8 +51,10 @@ def get_logger(level=logging.INFO):
         _logger.propagate = False
     return _logger
 
+
 __all__ = [
     "PadLvlWithFormatter", "get_logger", "USE_COLOR"
 ]
+
 # ---  DOCUMENT STATUS ---
 # XXX: Currently Finalized (For Current Build)

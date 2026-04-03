@@ -1,15 +1,18 @@
 # diesel/tools/basic_utils.py
 # Basic Utilities
-import os
+from typing import Any, Union, Iterable, Callable
+import collections.abc
 import json
 import time
-import collections.abc
-from typing import Any, Union, Iterable, Callable
 import uuid
+import os
+
+
 # >>> Basic Lambdas
 int_time = lambda : int(time.time()) 
 hex_uuid = lambda : uuid.uuid4().hex
 str_time = lambda : str(int_time())     # str(int(time.time()))
+
 
 # >>> Simple File Operations
 def read_file(fpath: str) -> str:
@@ -54,7 +57,7 @@ def contains_any(container: collections.abc.Iterable, items: Union[Any, Iterable
 def capitalize_first_letter(string: str) -> str:
     """ Returns the given string with the first letter capitalized, if the string is empty or is not a valid `str` type, it will return an empty string. """
     if string:
-         return string[:1].upper() + string[1:]
+        return string[:1].upper() + string[1:]
     return ""
 
 
@@ -140,15 +143,13 @@ class UniqueCounter:
 
 
 
-
-
 __all__ = [
-    "int_time", "hex_uuid", "str_time",  # Basic Lambdas 
-    "read_file", "write_file", # Simple File Operations
-    "save_json", "load_json",  # Json File Operations
-    "contains_any", "capitalize_first_letter", # General-Purpose
-    "remove_substrings", "remove_prefixes", "remove_suffixes", # Remove from String Operations
-    "UniqueCounter", # Simple Class
+    "int_time", "hex_uuid", "str_time",                         # Basic Lambdas 
+    "read_file", "write_file",                                  # Simple File Operations
+    "save_json", "load_json",                                   # Json File Operations
+    "contains_any", "capitalize_first_letter",                  # General-Purpose
+    "remove_substrings", "remove_prefixes", "remove_suffixes",  # Remove from String Operations
+    "UniqueCounter",                                            # Simple Counter Class
 ]
 
 # ---  DOCUMENT STATUS ---

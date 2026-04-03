@@ -1,5 +1,5 @@
-# /diesel/builder/aggregator.py
-# Aggregates everything for the `builder` system
+# diesel/builder/aggregator.py
+# Aggregates everything for the builder system
 
 # ===== IMPORTS =====
 from typing import *  # type: ignore
@@ -13,6 +13,7 @@ import os
 import re
 # >> Local Imports
 from tools import *
+from naming import *
 
 # ===== LOGGING SETUP =====
 logger = get_logger(level=logging.INFO)
@@ -35,20 +36,7 @@ def prefix_pattern_maker(prefixes: Union[str, Iterable[str]]) -> re.Pattern:
         return prefix_pattern_maker('|'.join(prefixes))
     raise TypeError("Expected str or Iterable[str].", prefixes)
 
-# ===== AUTO-AGGREGATOR CONFIGURATION =====
-# BUG: Removed, old duplicate
-# tables = {
-#     "color": [
-#         {"prefix": "mvThemeCol_",       "category": 0},
-#         {"prefix": "mvPlotCol_",        "category": 1},
-#         {"prefix": "mvNodeCol_",        "category": 2}
-#     ],"style": [
-#         {"prefix": "mvStyleVar_",       "category": 0},
-#         {"prefix": "mvPlotStyleVar_",   "category": 1},
-#         {"prefix": "mvNodeStyleVar_",   "category": 2},
-#         {"prefix": "mvNodesStyleVar_",  "category": 2}      # spelling error has to be accounted for, an extra 's' was added on some of the names
-#     ]
-# }
+
 REFRENCE = {
     ""
     "specs": {
@@ -235,18 +223,18 @@ color_name_conversion_table = [ # Used to make minor changes to COLOR names if t
     }
 ]
 
-# TODO: Complete
-def convert_name(kind:str, name:str, category:int) -> str: 
-    if category     == 0: # Category is ImGui
+# # NOTE: Removed, redundancy
+# def convert_name(kind:str, name:str, category:int) -> str: 
+#     if category     == 0: # Category is ImGui
         
-        pass
-    elif category   == 1: # Category is ImPlot
-        pass
-    elif category   == 2: # Category is ImNode
-        pass
-    else:
-        raise NotImplementedError()
-    return ''
+#         pass
+#     elif category   == 1: # Category is ImPlot
+#         pass
+#     elif category   == 2: # Category is ImNode
+#         pass
+#     else:
+#         raise NotImplementedError()
+#     return ''
 
 
 
@@ -296,10 +284,10 @@ def get_style_uses_pixels(style_dss_name: str) -> bool:
         return False
     return True
 
-def get_style_num_args(style_im_name: str, category: int, item_value: int) -> int:
-    """ Returns for the DearPyGui style, in **IM_NAME** name format (***prefix*** removed), the number of arguments the style will use – either 1 or 2.\nSpecific to styles. """
-    if category == 0: # mvStyleVar
-        if contains_any(style_im_name, ("Align", "Padding", "Item", "WindowMin")):
+def get_style_num_args(im_name: str, category: int, item_value: int) -> int:
+    """ Returns the number of arguments a DearPyGUI Style will use`[1 OR 2]` """
+    if category == 0: # mvStyleVar 
+        if contains_any(im_name, ("Align", "Padding", "Item", "WindowMin")):
             return 2
     elif category == 1: # mvPlotStyleVar
         if item_value > 10:
@@ -439,10 +427,42 @@ def collect_external_refs(external_refs, cache_dir=None):
     return collected_refs
 
 
+def convert_name(kind: str, im_name: str, category: int, *args, **kwargs) -> str:
+    """ Converts the `im_name` of the style/color to the DSS name. """
+    if kind == "style":
+        kebab_name = to_kebab_case(im_name)
+    elif kind == "color":
+        kebab_name = to_kebab_case(im_name) #TODO: Link properly
+    return kebab_name
 
+def build_item_record(kind: str, item_name: str, im_name: str, item_value: int, category: int, id_counter: UniqueCounter):
+    """ Builds a record for a DPG item. """
+    kebab_name = convert_name(kind, im_name, category)
+    return {
+        "kind": kind,
+        "dpg": item_name,
+        "dsl": kebab_name,
+        "im_name": im_name,
+        # "idtag": uuid.uuid4().hex,            # NOTE: Phasing out in favor of "idnum", 
+        "idnum": id_counter.get_next(),
+        "category": category,
+        "dpg_value": item_value,
+        "meta": {
+            "value_type": None,
+            "docstring": None,
+            "default": None
+        },
+        "traits": { }
+    }
+
+
+
+
+
+     
 # >>> Aggregator Function
 def aggregate(cache_dir=None):
-    # Setup
+    # Aggregation Setup
     counter = UniqueCounter()
     dpg_members = inspect.getmembers(dpg)
     external_refrences = collect_external_refs(CONFIG["external_refs"], cache_dir=cache_dir)
@@ -452,7 +472,6 @@ def aggregate(cache_dir=None):
         "widgets":[]
     }
 
-    pass
 
 # >>> Auto Aggregator Function
 def auto_aggregate(cache_dir=None):
@@ -656,4 +675,4 @@ __all__ = [
 
 # ---  DOCUMENT STATUS ---
 # XXX: In Development
-# XXX: Modified 4/2/26 - Full Diesel Project Transfer
+# XXX: Modified 4/3/26 - Cleanup
