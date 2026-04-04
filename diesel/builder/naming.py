@@ -30,7 +30,7 @@ NAME_RULES = {
                 note="Core colors: plot-* becomes color-plot-* to avoid plot namespace collision.",
             ),
             NameRule(
-                when=lambda name: True,
+                when=lambda name: True,                 # NOTE: Default Rule
                 then=lambda name: f"{name}-color",
                 note="Core colors default to *-color.",
             ),
@@ -42,7 +42,7 @@ NAME_RULES = {
                 note="Plot colors keep existing plot-* prefix.",
             ),
             NameRule(
-                when=lambda name: True,
+                when=lambda name: True,                 # NOTE: Default Rule
                 then=lambda name: f"plot-{name}",
                 note="Plot colors default to plot-*.",
             ),
@@ -59,7 +59,7 @@ NAME_RULES = {
                 note="Node colors: node-* becomes nodes-* to avoid awkward duplication.",
             ),
             NameRule(
-                when=lambda name: True,
+                when=lambda name: True,                 # NOTE: Default Rule
                 then=lambda name: f"node-{name}",
                 note="Node colors default to node-*.",
             ),
@@ -69,7 +69,7 @@ NAME_RULES = {
     "style": {
         CAT_CORE: [
             NameRule(
-                when=lambda name: True,
+                when=lambda name: True,                 # NOTE: Default Rule
                 then=lambda name: name,
                 note="Core styles keep their kebab-case name by default.",
             ),
@@ -81,7 +81,7 @@ NAME_RULES = {
                 note="Plot styles keep existing plot-* prefix.",
             ),
             NameRule(
-                when=lambda name: True,
+                when=lambda name: True,                 # NOTE: Default Rule
                 then=lambda name: f"plot-{name}",
                 note="Plot styles default to plot-*.",
             ),
@@ -98,7 +98,7 @@ NAME_RULES = {
                 note="Node styles: node-* becomes nodes-* where needed.",
             ),
             NameRule(
-                when=lambda name: True,
+                when=lambda name: True,                 # NOTE: Default Rule
                 then=lambda name: f"node-{name}",
                 note="Node styles default to node-*.",
             ),

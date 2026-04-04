@@ -223,19 +223,6 @@ color_name_conversion_table = [ # Used to make minor changes to COLOR names if t
     }
 ]
 
-# # NOTE: Removed, redundancy
-# def convert_name(kind:str, name:str, category:int) -> str: 
-#     if category     == 0: # Category is ImGui
-        
-#         pass
-#     elif category   == 1: # Category is ImPlot
-#         pass
-#     elif category   == 2: # Category is ImNode
-#         pass
-#     else:
-#         raise NotImplementedError()
-#     return ''
-
 
 
 def convert_color_name(name: str, category: int) -> str:
@@ -347,7 +334,67 @@ CONFIG = {
         }
     ]
 }
+PREFIX_MAP = {
+    "mvStyleVar_":      ("style", 0),
+    "mvPlotStyleVar_":  ("style", 1),
+    "mvNodeStyleVar_":  ("style", 2),
+    "mvNodesStyleVar_": ("style", 2),
+    "mvThemeCol_":      ("color", 0),
+    "mvPlotCol_":       ("color", 1),
+    "mvNodeCol_":       ("color", 2),
+    "mvNodesCol_":      ("color", 2),
+}
+
 # >>> Aggregator Functions
+def resolve_dpg_item(name):
+    for prefix, (kind, category) in PREFIX_MAP.items():
+        if name.startswith(prefix):
+            im_name = name.removeprefix(prefix)         #kebab_name = to_kebab_case(im_name)
+            return kind, category, im_name              #, kebab_name
+    return None
+
+def build_item_record(
+        kind: str, item_name: str, im_name: str,        # kebab_name: str,
+        item_value: int, category: int, 
+        id_counter: UniqueCounter
+    ):
+    """ Builds a record for a DPG item. """
+    return {
+        "kind":         kind,
+        "dpg":          item_name,
+        "dsl":          None,                           #kebab_name,
+        "im_name":      im_name,
+        "idnum":        id_counter.get_next(),
+        "category":     category,
+        "dpg_value":    item_value,
+        "meta": {
+            "value_type":   None,
+            "docstring":    None,
+            "default":      None
+        },
+        "traits": { }
+    }
+
+def collect_dpg_theming_items(dpg_members: inspect._GetMembersReturn[Any], id_counter: UniqueCounter):
+    dpg_items = { "style": [], "color": [] }
+    for dpg_name, value in dpg_members:
+        result = resolve_dpg_item(name=dpg_name)
+        if not result:
+            continue
+
+        kind, category, im_name = result                #, kebab_name
+
+        raw_record = build_item_record(
+            kind=kind,
+            item_name=dpg_name,
+            im_name=im_name,
+            item_value=value,
+            category=category,
+            id_counter=id_counter
+        )
+        dpg_items[kind].append(raw_record)
+    return dpg_items
+
 def collect_external_refs(external_refs, cache_dir=None):
     """ Collects external refrences from a cache directory or using the URLs from `external_refs` """
     collected_refs = {}
@@ -357,6 +404,7 @@ def collect_external_refs(external_refs, cache_dir=None):
         ref_fetch_success = False
         # Attempt primary url followed by any backups.
         for current_url in urls_docket:
+            # XXX: Fetching
             try:
                 result = fetch_url(
                     url         = current_url,
@@ -364,6 +412,7 @@ def collect_external_refs(external_refs, cache_dir=None):
                     use_cache   = ref["docache"] and is_cache_stable, # Will try to get from the cache first before using any networking
                     cache_dir   = cache_dir 
                 )
+            # XXX: Fetch Exception Handling
             except (FileNotFoundError, NotADirectoryError) as e:
                 # Error: curl binary or file not found
                 if isinstance(e, FileNotFoundError) and e.filename == "curl":
@@ -409,12 +458,13 @@ def collect_external_refs(external_refs, cache_dir=None):
             except Exception:
                 logger.exception("Unknown error occurred while fetching URL: %s", current_url)
                 raise
+            # XXX: External Refrence Logic
             else: # Fetch succeeded
                 collected_refs[ref["refname"]] = result
                 ref_fetch_success = True
                 logger.info("Successfully fetched refrence '%s' from the URL: '%s'", ref["refname"], current_url)
                 break # stop trying backups
-                
+        # XXX: Failed Fetch Handling
         if not ref_fetch_success:
             # Every url failed (for the current external ref)
             if ref.get("require", False):
@@ -427,36 +477,12 @@ def collect_external_refs(external_refs, cache_dir=None):
     return collected_refs
 
 
-def convert_name(kind: str, im_name: str, category: int, *args, **kwargs) -> str:
-    """ Converts the `im_name` of the style/color to the DSS name. """
-    if kind == "style":
-        kebab_name = to_kebab_case(im_name)
-    elif kind == "color":
-        kebab_name = to_kebab_case(im_name) #TODO: Link properly
-    return kebab_name
 
-def build_item_record(kind: str, item_name: str, im_name: str, item_value: int, category: int, id_counter: UniqueCounter):
-    """ Builds a record for a DPG item. """
-    kebab_name = convert_name(kind, im_name, category)
-    return {
-        "kind": kind,
-        "dpg": item_name,
-        "dsl": kebab_name,
-        "im_name": im_name,
-        # "idtag": uuid.uuid4().hex,            # NOTE: Phasing out in favor of "idnum", 
-        "idnum": id_counter.get_next(),
-        "category": category,
-        "dpg_value": item_value,
-        "meta": {
-            "value_type": None,
-            "docstring": None,
-            "default": None
-        },
-        "traits": { }
-    }
-
-
-
+def apply_name_rules(kind, name, category):
+    for rule in NAME_RULES[kind][category]: # Locate valid rules
+        if rule.when(name):                 # If NameRule can be applied, do so.
+            return rule.then(name)          # Get the NameRule-compliant name
+    return name                             # No "DEFAULT" NameRule was active
 
 
      
@@ -465,12 +491,16 @@ def aggregate(cache_dir=None):
     # Aggregation Setup
     counter = UniqueCounter()
     dpg_members = inspect.getmembers(dpg)
+
+    raw_theming_items = collect_dpg_theming_items(dpg_members, id_counter=counter)
     external_refrences = collect_external_refs(CONFIG["external_refs"], cache_dir=cache_dir)
-    aggr_results = {
-        "styles": [],
-        "colors": [],
-        "widgets":[]
-    }
+    # raw_
+    # aggr_results = {
+    #     "styles": [],
+    #     "colors": [],
+    #     "widgets":[]
+    # }
+
 
 
 # >>> Auto Aggregator Function
