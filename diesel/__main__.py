@@ -54,7 +54,7 @@ if __name__ == "__main__":
     result = aggregate(cache_dir=cache_dir)
     _timestop  = time.time()
     if FLAGS["print_timed"]:
-        print(f"Finished in: ({_timestop - _timestart})")
+        print(f"Finished in: {_timestop - _timestart} seconds")
     if FLAGS["does_output"]:
         fout_path = os.path.join(output_dir, BUILD["output_fname_func"]())
         save_json(fout_path, result, **BUILD["extra_save_kwargs"])

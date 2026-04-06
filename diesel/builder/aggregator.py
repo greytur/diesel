@@ -36,68 +36,6 @@ def prefix_pattern_maker(prefixes: Union[str, Iterable[str]]) -> re.Pattern:
         return prefix_pattern_maker('|'.join(prefixes))
     raise TypeError("Expected str or Iterable[str].", prefixes)
 
-
-REFRENCE = {
-    ""
-    "specs": {
-        "style": [
-            {
-                "name": "imgui",
-                "category": 0,
-                "url": "https://raw.githubusercontent.com/ocornut/imgui/refs/heads/docking/imgui.cpp",
-                "snip_start": "ImGuiStyle::ImGuiStyle()",
-                "snip_end": "// Behaviors",
-                "regex": re.compile(r'\s+([A-Z][a-zA-Z]+)\s+=\s+(.*?);\s*//\s*(.*)'),
-                "name_pos": 0, "type_pos": 1, "doc_pos": 2, "default_pos": 1, 
-                "do_manual_docstring": False,
-                "merge_function": None
-                #^[ \t]+([A-Z][a-zA-Z]+)[ \t]+=[ \t]+(.*?);[ \t]*//[ \t]*(.*)$
-            },
-            {
-                "name": "implot_1",
-                "category": 1,
-                "url": "https://raw.githubusercontent.com/epezent/implot/f156599faefe316f7dd20fe6c783bf87c8bb6fd9/implot.h",
-                "snip_start": "enum ImPlotStyleVar_ {",
-                "snip_end": "ImPlotStyleVar_COUNT",
-                "regex": re.compile(r'\s+(?:.*?_)([A-Z][a-zA-Z]+),\s+//\s(.*?),\s+(.*?)(?:\n|$)'),
-                "name_pos": 0, "type_pos": -1, "doc_pos": 1, "default_pos": -1, # 
-                "do_manual_docstring": False,
-                "merge_function": None
-                #\s+(?:.*?_)([A-Z][a-zA-Z]+),\s+//\s([a-zA-Z0-9]*?),\s+(.*?)(?:\n|$)
-            },
-            {
-                "name": "implot_2",
-                "category": 1,
-                "url": "https://raw.githubusercontent.com/epezent/implot/f156599faefe316f7dd20fe6c783bf87c8bb6fd9/implot.h",
-                "snip_start": "struct ImPlotStyle {",
-                "snip_end": "// style colors",
-                "regex": re.compile(r'\s+(.*?)\s+([A-Z][a-zA-Z]+);\s+//\s=\s+(.*?),?\s+(.*?)(?:\n|$)'),
-                "name_pos": 1, "type_pos": 0, "doc_pos": 3, "default_pos": 2,
-                "do_manual_docstring": False,
-                "merge_function": (
-                    lambda origin_dict, spec_dict: {
-                    "name": origin_dict["name"], "type": origin_dict["type"],
-                    "docstring": origin_dict["docstring"] if len(origin_dict["docstring"]) >= len(spec_dict["docstring"]) else spec_dict["docstring"],
-                    "default_value": spec_dict["default_value"] if not origin_dict["default_value"] else origin_dict["default_value"]
-                } if origin_dict["name"] == spec_dict["name"] else origin_dict
-                )
-                #^\s+([ac-zAC-Z0-9]*?)\s+([A-Z][a-zA-Z]+);\s+//\s=\s+(.*?),?\s+(.*?)(?:\n|$)
-            },
-            {
-                "name": "imnode",
-                "category": 2,
-                "url": "https://raw.githubusercontent.com/hoffstadt/DearPyGui/refs/heads/master/thirdparty/imnodes/imnodes.cpp",
-                "snip_start": "ImNodesStyle::ImNodesStyle()",
-                "snip_end": "Colors()",
-                "regex": re.compile(r'([A-Z][a-zA-Z]+)\(([0-9].*?)\),'),
-                "name_pos": 0, "type_pos": 1, "doc_pos": -1, "default_pos": 1,
-                "do_manual_docstring": True,
-                "merge_function": None
-                #([A-Z][a-zA-Z]+)\(([0-9].*?)\),
-            }
-        ]
-        }
-}
 STYLE_SPECS = [
     {
         "name": "imgui",
@@ -296,7 +234,7 @@ CONFIG = {
                 "https://raw.githubusercontent.com/epezent/implot/refs/heads/master/implot.h"
             ]
         },{
-            "refname": "imnodes.cpp",   # The refrence name, this is the [KEY] that will hold the returned str content, NOT the file.
+            "refname": "imnodes.cpp",   # The reference name, this is the [KEY] that will hold the returned str content, NOT the file.
             "require": False,           # Is this REQUIRED for functionality? Or can the step be skipped for a less desirable result?
             "desired": True,            # Is this DESIRED for functionality? Or can the step be skipped for a similar quality result?
             "docache": True,            # Does the download need to be stored locally in the cache?(Disable if changes are frequent!)
@@ -310,7 +248,7 @@ CONFIG = {
                 "https://raw.githubusercontent.com/Nelarius/imnodes/refs/heads/master/imnodes.cpp"
             ]
         },{
-            "refname": "imgui.cpp",     # The refrence name, this is the [KEY] that will hold the returned str content, NOT the file.
+            "refname": "imgui.cpp",     # The reference name, this is the [KEY] that will hold the returned str content, NOT the file.
             "require": False,           # Is this REQUIRED for functionality? Or can the step be skipped for a less desirable result?
             "desired": True,            # Is this DESIRED for functionality? Or can the step be skipped for a similar quality result?
             "docache": True,            # Does the download need to be stored locally in the cache?(Disable if changes are frequent!)
@@ -396,7 +334,7 @@ def collect_dpg_theming_items(dpg_members: Any, id_counter: UniqueCounter):
     return dpg_items
 
 def collect_external_refs(external_refs, cache_dir=None):
-    """ Collects external refrences from a cache directory or using the URLs from `external_refs` """
+    """ Collects external references from a cache directory or using the URLs from `external_refs` """
     collected_refs = {}
     is_cache_stable = True if (isinstance(cache_dir, str)) else False # Used to toggle caching, mainly from NotADirectoryError and FileNotFoundError
     for ref in external_refs:
@@ -444,7 +382,7 @@ def collect_external_refs(external_refs, cache_dir=None):
                 else:
                     collected_refs[ref["refname"]] = result
                     ref_fetch_success = True
-                    logger.info("Successfully fetched refrence '%s' from the URL: '%s'", ref["refname"], current_url)
+                    logger.info("Successfully fetched reference '%s' from the URL: '%s'", ref["refname"], current_url)
                     break
             except NoInternetConnectionError:
                 logger.exception("No internet connection; cannot fetch URL.")
@@ -458,11 +396,14 @@ def collect_external_refs(external_refs, cache_dir=None):
             except Exception:
                 logger.exception("Unknown error occurred while fetching URL: %s", current_url)
                 raise
-            # XXX: External Refrence Logic
+            # XXX: External Reference Logic
             else: # Fetch succeeded
                 collected_refs[ref["refname"]] = result
                 ref_fetch_success = True
-                logger.info("Successfully fetched refrence '%s' from the URL: '%s'", ref["refname"], current_url)
+                if not cache_dir: # If there was no caching involved, we know it was fetched from ONLINE not the cache
+                    logger.info("Successfully fetched reference '%s' from the URL: '%s'", ref["refname"], current_url)
+                else: # We fetched the reference
+                    logger.info("Successfully fetched reference '%s'", ref["refname"])
                 break # stop trying backups
         # XXX: Failed Fetch Handling
         if not ref_fetch_success:
@@ -493,7 +434,9 @@ def aggregate(cache_dir=None):
     dpg_members = inspect.getmembers(dpg)
 
     raw_theming_items = collect_dpg_theming_items(dpg_members, id_counter=counter)
-    external_refrences = collect_external_refs(CONFIG["external_refs"], cache_dir=cache_dir)
+    external_references = collect_external_refs(CONFIG["external_refs"], cache_dir=cache_dir)
+
+    
     # raw_
     # aggr_results = {
     #     "styles": [],
