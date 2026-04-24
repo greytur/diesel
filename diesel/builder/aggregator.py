@@ -1,6 +1,6 @@
 # diesel/builder/aggregator.py
 # Aggregates everything for the builder system
-
+# BUILT FOR: DearPyGUI Version 2.0
 # ===== IMPORTS =====
 from typing import *  # type: ignore
 import dearpygui.dearpygui as dpg
@@ -129,7 +129,7 @@ DOCSTRING_MAPS = [
 dpg_members = inspect.getmembers(dpg)
 # >>> Tables & Lambda Lookups
 # 
-theme_kinds = re.compile(r'mv(Style|Theme|Plot|Node|Nodes)(?:Style)?(Col|Var)_(.*)')
+#theme_kinds = re.compile(r'mv(Style|Theme|Plot|Node|Nodes)(?:Style)?(Col|Var)_(.*)')
 # mine = re.fullmatch(r'mv(Style|Theme|Plot|Node|Nodes)(Col|StyleVar)_(.*)', dpg_members[0][1])
 
 tables = {
@@ -265,8 +265,9 @@ CONFIG = {
             "docache": True, 
             "save_as": "mvAppItemTypes.inc",
             "description": "Contains the AppItem types in an unrefined format, it is highly important for determining elements and widgets.",
-            "primary_url": "https://raw.githubusercontent.com/hoffstadt/DearPyGui/40355739b7b1be4b063b2cfc919efbdcc124fb64/src/mvAppItemTypes.inc",
+            "primary_url": "https://raw.githubusercontent.com/hoffstadt/DearPyGui/8369d7c37b470e816405bd411e54992eeece4e60/src/mvAppItemTypes.inc",
             "backup_urls": [
+                "https://raw.githubusercontent.com/hoffstadt/DearPyGui/40355739b7b1be4b063b2cfc919efbdcc124fb64/src/mvAppItemTypes.inc",
                 "https://raw.githubusercontent.com/hoffstadt/DearPyGui/refs/heads/master/src/mvAppItemTypes.inc"
             ]
         }
@@ -431,11 +432,10 @@ def apply_name_rules(kind, name, category):
 def aggregate(cache_dir=None):
     # Aggregation Setup
     counter = UniqueCounter()
-    dpg_members = inspect.getmembers(dpg)
+    #dpg_members = inspect.getmembers(dpg)
 
     raw_theming_items = collect_dpg_theming_items(dpg_members, id_counter=counter)
     external_references = collect_external_refs(CONFIG["external_refs"], cache_dir=cache_dir)
-
     
     # raw_
     # aggr_results = {
@@ -443,6 +443,10 @@ def aggregate(cache_dir=None):
     #     "colors": [],
     #     "widgets":[]
     # }
+    return {
+        "raws": raw_theming_items, 
+        "refs": external_references
+    }
 
 
 

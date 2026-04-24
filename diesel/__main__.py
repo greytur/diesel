@@ -8,7 +8,7 @@ import os, time
 from builder.aggregator import aggregate
 
 from tools import save_json, hex_uuid
-
+global result
 MAIN_FILE  = os.path.abspath(__file__)   # The `__main__.py` absolute file path
 MAIN_DIR   = os.path.dirname(MAIN_FILE)  # The parent directory path of this file
 
