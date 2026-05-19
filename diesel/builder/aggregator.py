@@ -445,7 +445,7 @@ def aggregate(cache_dir=None):
     # }
     return {
         "raws": raw_theming_items, 
-        "refs": external_references
+        "refs": external_references,
     }
 
 
