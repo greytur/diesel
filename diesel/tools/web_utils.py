@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import urllib.request
+from pathlib import Path
 from typing import Union
 from .basic_utils import write_file, read_file
 
@@ -73,8 +74,8 @@ def download_url(url: str) -> str:
 
 def fetch_url(
     url: str,
-    cache_dir: Union[str, None] = None,
-    filename: Union[str, None] = None,
+    cache_dir: Union[str, Path, None] = None,
+    filename: Union[str, Path, None] = None,
     use_cache: bool = True
 ) -> str:
     """ Fetch the contents of a URL as a string, optionally caching locally.

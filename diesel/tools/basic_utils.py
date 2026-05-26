@@ -1,6 +1,7 @@
 # diesel/tools/basic_utils.py
 # Basic Utilities
 from typing import Any, Union, Iterable, Callable
+from pathlib import Path
 import collections.abc
 import json
 import time
@@ -15,7 +16,7 @@ str_time = lambda : str(int_time())     # str(int(time.time()))
 
 
 # >>> Simple File Operations
-def read_file(fpath: str) -> str:
+def read_file(fpath: str | Path) -> str:
     """ Reads a file's contents and returns them if the given file path exists.<br> Throws `FileNotFoundError` if path does not exist. """
     if not os.path.exists(fpath):
         raise FileNotFoundError(fpath)
@@ -23,19 +24,19 @@ def read_file(fpath: str) -> str:
         fdata = f.read()
     return fdata
 
-def write_file(fpath: str, data: str) -> None:
+def write_file(fpath: str | Path, data: str) -> None:
     """ Writes the contents of `data` to `fpath`, it will attempt to create a file if it does not exist, and will overwrite a file if it does. """
     with open(fpath, 'w') as f:
         f.write(data)
 
 
 # >>> JSON File Operations
-def save_json(fpath: str, data: Any, *args, **kwargs) -> None:
+def save_json(fpath: str | Path, data: Any, *args, **kwargs) -> None:
     """ A `json.dumps` wrapper for `write_file`, writes the result of `json.dumps(data)` to `fpath`. """
     data = json.dumps(data, *args, **kwargs)
     write_file(fpath, data)
 
-def load_json(fpath: str, *args, **kwargs) -> Any:
+def load_json(fpath: str | Path, *args, **kwargs) -> Any:
     """ A `json.loads` wrapper for `read_file`, loads `fpath` directly into `json.loads(data)` and returns the output. """
     data = read_file(fpath)
     return json.loads(data, *args, **kwargs)
@@ -123,9 +124,9 @@ class UniqueCounter:
     - `get_counter`: returns the current counter value
     - `reset_counter`: resets the counter value to 0
     """
-    def __init__(self):
-        """ Initializes a new `UniqueCounter` with a count of `0`. """
-        self._counter = 0
+    def __init__(self, start=0):
+        """ Initializes a new `UniqueCounter` with a initial count of `start`. """
+        self._counter = start
     
     def get_next(self) -> int:
         """ Returns the current integer count and increments the counter. """
@@ -137,9 +138,9 @@ class UniqueCounter:
         """ Returns the current integer count. """
         return self._counter
 
-    def reset_counter(self) -> None:
-        """ Resets the integer count value to `0`. """
-        self._counter = 0
+    def reset_counter(self, num=0) -> None:
+        """ Resets the integer count value to `num`. """
+        self._counter = num
 
 
 

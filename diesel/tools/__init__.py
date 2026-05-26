@@ -8,13 +8,16 @@ from .basic_utils import (
     remove_substrings, remove_prefixes, remove_suffixes,
     UniqueCounter,
 )
+from .logger_utils import (
+    PadLvlWithFormatter, get_logger, USE_COLOR,
+)
 from .web_utils import (
     InvalidURLError, NoInternetConnectionError,
     is_internet_available, is_valid_url,
     download_url, fetch_url,
 )
-from .logger_utils import (
-    PadLvlWithFormatter, get_logger, USE_COLOR,
+from .parsing_utils import (
+    parse_color, hsl_to_rgb,
 )
 
 
@@ -34,6 +37,8 @@ __all__ = [
     "PadLvlWithFormatter",                                      # Classes
     "get_logger",                                               # Functions
     "USE_COLOR",                                                # Constants
+    # diesel/tools/parsing_utils.py
+    "parse_color", "hsl_to_rgb",                                # Color Operations
 ]
 
 # ---  DOCUMENT STATUS ---

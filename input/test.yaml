@@ -4,8 +4,14 @@ $themes:
       text-color: rgb(255, 255, 255)
     text:
       text-color: rgba(255, 255, 255, 255)
-  1:
+  iojoij:
     $default:
       text-color: rgb(25, 10, 255)
     text:
       text-color: rgba(255, 40, 255, 255)
+    button:
+      window-padding: [10, 21]
+      button-color: hex #ffffffff
+
+
+#(#RGB, #RGBA, #RRGGBB or #RRGGBBAA)

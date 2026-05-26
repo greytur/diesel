@@ -1,9 +1,9 @@
 # diesel/builder/naming.py
 # Handles naming rules for `aggregator.py`
 
+import re
 from typing import Callable, Iterable
 from dataclasses import dataclass
-
 
 CAT_CORE = 0 # dpg.mvThemeCat_Core
 CAT_PLOT = 1 # dpg.mvThemeCat_Plots
@@ -16,10 +16,18 @@ Transform = Callable[[str], str]
 
 @dataclass(frozen=True)
 class NameRule:
-    when: Predicate
-    then: Transform
-    note: str = ""
+    when: Predicate     # When Callable(NAME) returns TRUE
+    then: Transform     # Then Callable(Name) returns STRING 
+    note: str = ""      # NOTE about how this Rule works.
 
+
+
+def pascal_to_kebab_case(string: str, *args, **kwargs) -> str:
+    """ Convert PascalCase to kebab-case (handles acronyms like OMGThisIsNeat). """
+    return re.sub(r'(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])', '-', string).lower()
+
+# Tells the DSL naming processor to pre-proccess the name with this function BEFORE applying rules
+PREPROCESSOR_FUNCTION = pascal_to_kebab_case 
 
 NAME_RULES = {
     "color": {
@@ -103,11 +111,35 @@ NAME_RULES = {
                 note="Node styles default to node-*.",
             ),
         ],
-    }
+    },
+    "item": {
+        CAT_CORE: [
+            NameRule(
+                when=lambda name: True,                 # NOTE: Default Rule
+                then=lambda name: name,
+                note="Core widgets are unchanged",
+            ),
+        ],
+        CAT_PLOT: [
+            NameRule(
+                when=lambda name: True,                 # NOTE: Default Rule
+                then=lambda name: name,
+                note="Plot widgets are unchanged",
+            ),
+        ],
+        CAT_NODE: [
+            NameRule(
+                when=lambda name: True,                 # NOTE: Default Rule
+                then=lambda name: name,
+                note="Node widgets are unchanged",
+            ),
+        ],
+    },
 }
 
 __all__ = [
     "CAT_CORE", "CAT_PLOT", "CAT_NODE",                 # Category Constants
-    "NAME_RULES",                                       # Naming Policy Rules
-    "NameRule", "Predicate", "Transform"                # Rule-Related 
+    "NAME_RULES", "PREPROCESSOR_FUNCTION",              # Naming Policy Rules
+    "NameRule", "Predicate", "Transform",               # Rule-Related 
+    "pascal_to_kebab_case"                              # PreProc Functions
 ]

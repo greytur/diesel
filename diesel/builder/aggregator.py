@@ -14,27 +14,237 @@ import re
 # >> Local Imports
 from tools import *
 from builder.naming import *
-
-# ===== LOGGING SETUP =====
+from config import AGGREGATOR_CONFIG
+# ===== SIMPLE SETUP =====
 logger = get_logger(level=logging.INFO)
+dpg_members = inspect.getmembers(dpg)
 
-# ===== REGEX CONSTANTS =====
-pascal_2_kebab_regex = r'(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])'
-
+# ===== CONSTANTS =====
+THEMING_PREFIX_DICT = AGGREGATOR_CONFIG["theming_prefix_dict"]
+EXTERNAL_REFERENCES = AGGREGATOR_CONFIG["external_references"]
 # ===== GENERIC UTILITIES =====
-def to_kebab_case(string: str) -> str:
-    """ Convert PascalCase to kebab-case (handles acronyms like OMGThisIsNeat). """
-    return re.sub(pascal_2_kebab_regex, '-', string).lower()
 
-def prefix_pattern_maker(prefixes: Union[str, Iterable[str]]) -> re.Pattern:
-    """ Convert prefixes to a regex pattern. Accepts either a joined string or an iterable of strings. """
-    if isinstance(prefixes, str):
-        return re.compile(fr"({prefixes})[a-zA-Z]+")
-    elif isinstance(prefixes, Iterable):
-        if not all(isinstance(p, str) for p in prefixes):
-            raise TypeError("All prefixes must be strings.", prefixes)
-        return prefix_pattern_maker('|'.join(prefixes))
-    raise TypeError("Expected str or Iterable[str].", prefixes)
+def get_style_num_args(im_name: str, category: int, item_value: int) -> int:
+    """ Returns the number of arguments a DearPyGUI Style will use`[1 OR 2]` """
+    if category == 0: # mvStyleVar 
+        if contains_any(im_name, ("Align", "Padding", "Item", "WindowMin")):
+            return 2
+    elif category == 1: # mvPlotStyleVar
+        if item_value > 10:
+            return 2 
+    return 1 # mvNode(s)StyleVar & Remaining
+
+# >>> Aggregator Functions
+def resolve_dpg_item(name):
+    for prefix, (kind, category) in THEMING_PREFIX_DICT.items():
+        if name.startswith(prefix):
+            im_name = name.removeprefix(prefix)         #kebab_name = to_kebab_case(im_name)
+            return kind, category, im_name              #, kebab_name
+    return None
+
+def build_item_record(
+        kind: str, item_name: str, dsl_name:str, im_name: str,
+        item_value: int, category: int, 
+        id_counter: UniqueCounter
+    ):
+    """ Builds a record for a DPG item. """
+    return {
+        "kind":         kind,
+        "dpg":          item_name,
+        "dsl":          dsl_name,
+        "im_name":      im_name,
+        "idnum":        id_counter.get_next(),
+        "category":     category,
+        "dpg_value":    item_value,
+        "meta": {
+            "value_type":   None,
+            "docstring":    None,
+            "default":      None
+        },
+        "traits": { }
+    }
+
+def collect_dpg_theming_items(dpg_members: Any, id_counter: UniqueCounter):
+    dpg_items = { "style": [], "color": [] }
+    for dpg_name, value in dpg_members:
+        # Resolve the information from the name
+        result = resolve_dpg_item(name=dpg_name)
+        if not result:
+            continue
+        kind, category, im_name = result                #, kebab_name
+        # Get the DSL Name
+        dsl_name = apply_naming_rules(im_name, kind, category)
+        # Build raw item record
+        raw_record = build_item_record(
+            kind=kind,
+            item_name=dpg_name,
+            dsl_name=dsl_name,
+            im_name=im_name,
+            item_value=value,
+            category=category,
+            id_counter=id_counter
+        )
+        dpg_items[kind].append(raw_record)
+    return dpg_items
+
+def collect_external_refs(external_refs, cache_dir=None):
+    """ Collects external references from a cache directory or using the URLs from `external_refs` """
+    collected_refs = {}
+    is_cache_stable = True if (isinstance(cache_dir, str)) else False  # Used to toggle caching, mainly from NotADirectoryError and FileNotFoundError
+
+    for ref in external_refs:
+        urls_docket = [ref["primary_url"]] + ref.get("backup_urls", [])  # The primary url followed by any backups
+        ref_fetch_success = False
+
+        for current_url in urls_docket:
+            try:
+                result = fetch_url(
+                    url       = current_url,
+                    filename  = ref["save_as"],
+                    use_cache = ref["docache"] and is_cache_stable,  # Will try to get from the cache first before using any networking
+                    cache_dir = cache_dir,
+                )
+
+            except (FileNotFoundError, NotADirectoryError) as e:
+                if isinstance(e, FileNotFoundError) and e.filename == "curl":
+                    logger.exception("The command `curl` was not found when called via subprocess!")
+                    raise # EXIT
+
+                logger.exception(
+                    "Cache path '%s' is unusable/unstable (missing or not a directory); "
+                    "retrying this URL without caching (continuing to next url if fetch fails).",
+                    cache_dir,
+                )
+                is_cache_stable = False  # Disable the cache for this run
+                logger.warning(
+                    "Caching within collect_external_refs has been disabled for this run! "
+                    "(future calls to the function are not affected, only fetch_url calls within this run)")
+                
+                
+                try:
+                    result = fetch_url(url=current_url, use_cache=False)
+                except (NoInternetConnectionError, FileNotFoundError, OSError):
+                    logger.exception("Failed to fetch URL and got an exception/error that prevents continuation "
+                        "(cache-retry failed).")
+                    raise
+                except (ValueError, subprocess.CalledProcessError, InvalidURLError):
+                    logger.exception("Failed to fetch URL on retry; ignoring and continuing to next url (url='%s')",current_url)
+                    continue
+                except Exception:
+                    logger.exception("Unknown error occurred while retrying URL: %s", current_url)
+                    raise
+                else:
+                    collected_refs[ref["refname"]] = result
+                    ref_fetch_success = True
+                    logger.info("Successfully fetched reference '%s' from the URL: '%s'", ref["refname"], current_url)
+                    break
+
+            except NoInternetConnectionError:
+                logger.exception("No internet connection; cannot fetch URL.")
+                raise
+            except OSError:
+                logger.exception("Subprocess failed to run curl; likely a permissions/resource issue.")
+                raise
+            except (InvalidURLError, ValueError, subprocess.CalledProcessError):
+                logger.exception("Failed to fetch URL: %s", current_url)  # In order: invalid Url, fetch returned no content, subprocess.run exit code was not 0
+                continue  # try next backup URL
+            except Exception:
+                logger.exception("Unknown error occurred while fetching URL: %s", current_url)
+                raise
+
+            else:
+                collected_refs[ref["refname"]] = result
+                ref_fetch_success = True
+
+                if not cache_dir:  # If there was no caching involved, we know it was fetched from ONLINE not the cache
+                    logger.info("Successfully fetched reference '%s' from the URL: '%s'", ref["refname"], current_url)
+                else:  # We fetched the reference
+                    logger.info("Successfully fetched reference '%s'", ref["refname"])
+
+                break  # stop trying backups
+
+        if not ref_fetch_success:
+            if ref.get("require", False):
+                logger.error("Required reference '%s' could not be fetched from any URL.", ref["refname"])
+                raise RuntimeError(f"Required reference '{ref['refname']}' failed to fetch.")
+
+            elif ref.get("desired", False):
+                logger.warning("Desired reference '%s' could not be fetched from any URL. Skipping.", ref["refname"])
+
+            else:
+                logger.info("Optional reference '%s' could not be fetched. Skipping silently.", ref["refname"])
+
+    return collected_refs
+
+
+def collect_dpg_items(dpg_members: Any, id_counter: UniqueCounter, external_references: Any):
+    pattern = re.compile(r"X\(\s*(mv[a-zA-Z0-9]+)\s*\)")
+    item_types = pattern.findall(external_references["mvAppItemTypes.inc"])
+    
+    dpg_items = { "item": [] }
+    for item_index, item in enumerate(item_types):
+        kind = "item"
+        im_name = item.removeprefix('mv')
+        category = 0
+        dsl_name = apply_naming_rules(im_name, kind, category)
+        raw_record = build_item_record(
+            kind="item",
+            item_name=item,
+            im_name=im_name,
+            dsl_name=dsl_name,
+            item_value=(item_index + 1),
+            category=category,
+            id_counter=id_counter
+        )
+        dpg_items[kind].append(raw_record)
+    return dpg_items
+
+
+def apply_naming_rules(name, kind, category):
+    # Handle any preprocessing required (all naming information is passed by default)
+    name = PREPROCESSOR_FUNCTION(name, kind, category) 
+    for rule in NAME_RULES[kind][category]: # Locate valid rules
+        if rule.when(name):                 # If NameRule can be applied, do so.
+            return rule.then(name)          # Get the NameRule-compliant name
+    return name                             # No "DEFAULT" NameRule was active
+   
+     
+# >>> Aggregator Function
+def aggregate(cache_dir=None):
+    # Aggregation Setup
+    counter = UniqueCounter()
+    counter.get_next()          # BUG: USED To allow mvAll to properly be slotted into place at idnum `0`
+    #dpg_members = inspect.getmembers(dpg)
+
+    raw_theming_items = collect_dpg_theming_items(dpg_members, id_counter=counter)
+    external_references = collect_external_refs(EXTERNAL_REFERENCES, cache_dir=cache_dir)
+    raw_target_items = collect_dpg_items(dpg_members, id_counter=counter, external_references=external_references)
+
+    return {
+        "raws": raw_theming_items | raw_target_items, # type: ignore
+        #"refs": external_references,
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 STYLE_SPECS = [
     {
@@ -125,332 +335,24 @@ DOCSTRING_MAPS = [
     },
 ]
 
-# ===== GLOBAL VARIABLES =====
-dpg_members = inspect.getmembers(dpg)
-# >>> Tables & Lambda Lookups
-# 
-#theme_kinds = re.compile(r'mv(Style|Theme|Plot|Node|Nodes)(?:Style)?(Col|Var)_(.*)')
-# mine = re.fullmatch(r'mv(Style|Theme|Plot|Node|Nodes)(Col|StyleVar)_(.*)', dpg_members[0][1])
-
-tables = {
-    "color": [
-        {"prefix": "mvThemeCol_",       "category": 0},
-        {"prefix": "mvPlotCol_",        "category": 1},
-        {"prefix": "mvNodeCol_",        "category": 2},
-        {"prefix": "mvNodesCol_",       "category": 2}      # spelling error has to be accounted for, an extra 's' was added on some of the names
-    ],"style": [
-        {"prefix": "mvStyleVar_",       "category": 0},
-        {"prefix": "mvPlotStyleVar_",   "category": 1},
-        {"prefix": "mvNodeStyleVar_",   "category": 2},
-        {"prefix": "mvNodesStyleVar_",  "category": 2}      # spelling error has to be accounted for, an extra 's' was added on some of the names
-    ]
-}
-color_name_conversion_table = [ # Used to make minor changes to COLOR names if they match for the KEY's lambda function, each dictionary is for a CATEGORY (CORE/PLOT/NODE), 
-                                 #      changes are made by assigning the result of the KEY'S VALUE lambda function to the item name.   for NAME_LOOKUP in TABLE[CATEGORY]: if NAME_LOOKUP(kebab_name): kebab_name = TABLE[CATEGORY][LOOKUP] (kebab_name); break
-    # When a match occurs, the loop breaks, so only one match and alteration may occur per input
-    {   # ---- CORE CATEGORY NAME CHANGES ----
-        (lambda input_name  : input_name.startswith("plot-"))   : (lambda input_name: f'color-{input_name}'),
-        (lambda input_name  : True)                             : (lambda input_name: f'{input_name}-color') # DEFAULT
-    },{ # ---- PLOT CATEGORY NAME CHANGES ----
-        (lambda input_name  : input_name.startswith("plot-"))   : (lambda input_name: input_name),
-        (lambda input_name  : True)                             : (lambda input_name: f'plot-{input_name}')  # DEFAULT
-    },{ # ---- NODE CATEGORY NAME CHANGES ----
-        (lambda input_name  : input_name.startswith("grid-"))   : (lambda input_name: f'node-editor-{input_name}'),
-        (lambda input_name  : input_name.startswith("node-"))   : (lambda input_name: f'nodes-{input_name}'),
-        (lambda input_name  : True)                             : (lambda input_name: f'node-{input_name}')  # DEFAULT
-    }
-]
 
 
 
-def convert_color_name(name: str, category: int) -> str:
-    """
-    category: 0 = CORE, 1 = PLOT, 2 = NODE
-    """
-    if category == 0:  # CORE
-        # If it starts with 'plot-', prefix with 'color-'; else suffix '-color'
-        if name.startswith("plot-"):
-            return re.sub(r'^plot-', 'color-', name)
-        return re.sub(r'$', '-color', name)
-    
-    elif category == 1:  # PLOT
-        # If it starts with 'plot-', leave it; else prefix with 'plot-'
-        if name.startswith("plot-"):
-            return name
-        return re.sub(r'^', 'plot-', name)
-    
-    elif category == 2:  # NODE
-        # 'grid-*' → 'node-editor-*', 'node-*' → 'nodes-*', else → 'node-*'
-        if name.startswith("grid-"):
-            return re.sub(r'^grid-', 'node-editor-', name)
-        elif name.startswith("node-"):
-            return re.sub(r'^node-', 'nodes-', name)
-        else:
-            return re.sub(r'^', 'node-', name)
-    
-    else:
-        raise ValueError("Invalid category")
-
-pixel_style_lookup = ( # used by `get_style_uses_pixels()`
-    ('triangle'), # Resolves an issue where 'angle' triggers a false on uses-pixels, when it does for "mvNodeStyleVar_PinTriangleSideLength"
-    ('alpha', 'angle', 'align', 'segements'), # If the style string name contains any of these substrings, it is unsupported for px units
-    ('marker'),  # If this is found in the string, and does not contain anything from `pixel_style_lookup[2]`, it is unsupported for px units
-    ('size', 'weight')
-)
-
-# >>> >>> Auto-Aggregator Configuration Functions
-def get_style_uses_pixels(style_dss_name: str) -> bool:
-    """ Returns if the DearPyGui style, in **DSS** name format (kebab-case), uses pixels in practice as an implied unit of measurement.\nSpecific to styles. """
-    if contains_any(style_dss_name, pixel_style_lookup[0]): # mvNodeStyleVar_PinTriangleSideLength before ANGLE triggers as false
-        return True
-    if contains_any(style_dss_name, pixel_style_lookup[1]):
-        return False
-    if contains_any(style_dss_name, pixel_style_lookup[2]) and not contains_any(style_dss_name, pixel_style_lookup[3]):
-        return False
-    return True
-
-def get_style_num_args(im_name: str, category: int, item_value: int) -> int:
-    """ Returns the number of arguments a DearPyGUI Style will use`[1 OR 2]` """
-    if category == 0: # mvStyleVar 
-        if contains_any(im_name, ("Align", "Padding", "Item", "WindowMin")):
-            return 2
-    elif category == 1: # mvPlotStyleVar
-        if item_value > 10:
-            return 2 
-    return 1 # mvNode(s)StyleVar & Remaining
-
-# >>> Aggregator Config
-CONFIG = {
-    "external_refs": [
-        {
-            "refname": "implot.h",   
-            "require": False,            
-            "desired": True,            
-            "docache": True, 
-            "save_as": "implot.h",
-            "description": "No description given.",
-            "primary_url": "https://raw.githubusercontent.com/epezent/implot/f156599faefe316f7dd20fe6c783bf87c8bb6fd9/implot.h",
-            "backup_urls": [
-                "https://raw.githubusercontent.com/epezent/implot/refs/heads/master/implot.h"
-            ]
-        },{
-            "refname": "imnodes.cpp",   # The reference name, this is the [KEY] that will hold the returned str content, NOT the file.
-            "require": False,           # Is this REQUIRED for functionality? Or can the step be skipped for a less desirable result?
-            "desired": True,            # Is this DESIRED for functionality? Or can the step be skipped for a similar quality result?
-            "docache": True,            # Does the download need to be stored locally in the cache?(Disable if changes are frequent!)
-            "save_as": "imnodes.cpp",
-            "description": "No description given.",
-            "primary_url": "https://raw.githubusercontent.com/hoffstadt/DearPyGui/40355739b7b1be4b063b2cfc919efbdcc124fb64/thirdparty/imnodes/imnodes.cpp",
-            "backup_urls": [
-                "https://raw.githubusercontent.com/hoffstadt/DearPyGui/refs/heads/master/thirdparty/imnodes/imnodes.cpp", 
-                "https://raw.githubusercontent.com/Nelarius/imnodes/8563e1655bd9bb1f249e6552cc6274d506ee788b/imnodes.cpp",
-                "https://raw.githubusercontent.com/Nelarius/imnodes/b2ec254ce576ac3d42dfb7aef61deadbff8e7211/imnodes.cpp",
-                "https://raw.githubusercontent.com/Nelarius/imnodes/refs/heads/master/imnodes.cpp"
-            ]
-        },{
-            "refname": "imgui.cpp",     # The reference name, this is the [KEY] that will hold the returned str content, NOT the file.
-            "require": False,           # Is this REQUIRED for functionality? Or can the step be skipped for a less desirable result?
-            "desired": True,            # Is this DESIRED for functionality? Or can the step be skipped for a similar quality result?
-            "docache": True,            # Does the download need to be stored locally in the cache?(Disable if changes are frequent!)
-            "save_as": "imgui.cpp",     # The file that this will be saved as when caching, used mainly to prevent filename conflicts
-            "description": "The primary C++ file of the master branch of ImGui, despite supporting docking, DearPyGui does not use the docking branch.",
-            "primary_url": "https://raw.githubusercontent.com/ocornut/imgui/139e99ca37a3e127c87690202faec005cd892d36/imgui.cpp",
-            "backup_urls": [
-                "https://raw.githubusercontent.com/ocornut/imgui/refs/heads/docking/imgui.cpp",
-            ]
-        },{
-            "refname": "mvAppItemTypes.inc",   
-            "require": True,            
-            "desired": True,
-            "docache": True, 
-            "save_as": "mvAppItemTypes.inc",
-            "description": "Contains the AppItem types in an unrefined format, it is highly important for determining elements and widgets.",
-            "primary_url": "https://raw.githubusercontent.com/hoffstadt/DearPyGui/8369d7c37b470e816405bd411e54992eeece4e60/src/mvAppItemTypes.inc",
-            "backup_urls": [
-                "https://raw.githubusercontent.com/hoffstadt/DearPyGui/40355739b7b1be4b063b2cfc919efbdcc124fb64/src/mvAppItemTypes.inc",
-                "https://raw.githubusercontent.com/hoffstadt/DearPyGui/refs/heads/master/src/mvAppItemTypes.inc"
-            ]
-        }
-    ]
-}
-PREFIX_MAP = {
-    "mvStyleVar_":      ("style", 0),
-    "mvPlotStyleVar_":  ("style", 1),
-    "mvNodeStyleVar_":  ("style", 2),
-    "mvNodesStyleVar_": ("style", 2),
-    "mvThemeCol_":      ("color", 0),
-    "mvPlotCol_":       ("color", 1),
-    "mvNodeCol_":       ("color", 2),
-    "mvNodesCol_":      ("color", 2),
-}
-
-# >>> Aggregator Functions
-def resolve_dpg_item(name):
-    for prefix, (kind, category) in PREFIX_MAP.items():
-        if name.startswith(prefix):
-            im_name = name.removeprefix(prefix)         #kebab_name = to_kebab_case(im_name)
-            return kind, category, im_name              #, kebab_name
-    return None
-
-def build_item_record(
-        kind: str, item_name: str, im_name: str,        # kebab_name: str,
-        item_value: int, category: int, 
-        id_counter: UniqueCounter
-    ):
-    """ Builds a record for a DPG item. """
-    return {
-        "kind":         kind,
-        "dpg":          item_name,
-        "dsl":          None,                           #kebab_name,
-        "im_name":      im_name,
-        "idnum":        id_counter.get_next(),
-        "category":     category,
-        "dpg_value":    item_value,
-        "meta": {
-            "value_type":   None,
-            "docstring":    None,
-            "default":      None
-        },
-        "traits": { }
-    }
-
-def collect_dpg_theming_items(dpg_members: Any, id_counter: UniqueCounter):
-    dpg_items = { "style": [], "color": [] }
-    for dpg_name, value in dpg_members:
-        result = resolve_dpg_item(name=dpg_name)
-        if not result:
-            continue
-
-        kind, category, im_name = result                #, kebab_name
-
-        raw_record = build_item_record(
-            kind=kind,
-            item_name=dpg_name,
-            im_name=im_name,
-            item_value=value,
-            category=category,
-            id_counter=id_counter
-        )
-        dpg_items[kind].append(raw_record)
-    return dpg_items
-
-def collect_external_refs(external_refs, cache_dir=None):
-    """ Collects external references from a cache directory or using the URLs from `external_refs` """
-    collected_refs = {}
-    is_cache_stable = True if (isinstance(cache_dir, str)) else False # Used to toggle caching, mainly from NotADirectoryError and FileNotFoundError
-    for ref in external_refs:
-        urls_docket = [ref["primary_url"]] + ref.get("backup_urls", []) # The primary url followed by any backups
-        ref_fetch_success = False
-        # Attempt primary url followed by any backups.
-        for current_url in urls_docket:
-            # XXX: Fetching
-            try:
-                result = fetch_url(
-                    url         = current_url,
-                    filename    = ref["save_as"],
-                    use_cache   = ref["docache"] and is_cache_stable, # Will try to get from the cache first before using any networking
-                    cache_dir   = cache_dir 
-                )
-            # XXX: Fetch Exception Handling
-            except (FileNotFoundError, NotADirectoryError) as e:
-                # Error: curl binary or file not found
-                if isinstance(e, FileNotFoundError) and e.filename == "curl":
-                    logger.exception("The command `curl` was not found when called via subprocess!")
-                    raise
-                # Error: cache directory is missing or invalid
-                logger.exception(
-                    "Cache path '%s' is unusable/unstable (missing or not a directory); "
-                    "retrying this URL without caching (continuing to next url if fetch fails).",
-                    cache_dir,
-                )
-                is_cache_stable = False # Disable the cache for this run
-                logger.warning("Caching within collect_external_refs has been disabled for this run! (future calls to the function are not affected, only fetch_url calls within this run)")
-                try:
-                    result = fetch_url(url=current_url, use_cache=False)
-                except (NoInternetConnectionError, FileNotFoundError, OSError):
-                    logger.exception(
-                        "Failed to fetch URL and got an exception/error that prevents continuation "
-                        "(cache-retry failed)."
-                    );raise
-                except (ValueError, subprocess.CalledProcessError, InvalidURLError):
-                    logger.exception(
-                        "Failed to fetch URL on retry; ignoring and continuing to next url (url='%s')",
-                        current_url
-                    );continue
-                except Exception:
-                    logger.exception("Unknown error occurred while retrying URL: %s", current_url)
-                    raise
-                else:
-                    collected_refs[ref["refname"]] = result
-                    ref_fetch_success = True
-                    logger.info("Successfully fetched reference '%s' from the URL: '%s'", ref["refname"], current_url)
-                    break
-            except NoInternetConnectionError:
-                logger.exception("No internet connection; cannot fetch URL.")
-                raise
-            except OSError:
-                logger.exception("Subprocess failed to run curl; likely a permissions/resource issue.")
-                raise
-            except (InvalidURLError, ValueError, subprocess.CalledProcessError):
-                logger.exception("Failed to fetch URL: %s", current_url) # In order: invalid Url, fetch returned no content, subprocess.run exit code was not 0 
-                continue  # try next backup URL
-            except Exception:
-                logger.exception("Unknown error occurred while fetching URL: %s", current_url)
-                raise
-            # XXX: External Reference Logic
-            else: # Fetch succeeded
-                collected_refs[ref["refname"]] = result
-                ref_fetch_success = True
-                if not cache_dir: # If there was no caching involved, we know it was fetched from ONLINE not the cache
-                    logger.info("Successfully fetched reference '%s' from the URL: '%s'", ref["refname"], current_url)
-                else: # We fetched the reference
-                    logger.info("Successfully fetched reference '%s'", ref["refname"])
-                break # stop trying backups
-        # XXX: Failed Fetch Handling
-        if not ref_fetch_success:
-            # Every url failed (for the current external ref)
-            if ref.get("require", False):
-                logger.error("Required reference '%s' could not be fetched from any URL.", ref["refname"])
-                raise RuntimeError(f"Required reference '{ref['refname']}' failed to fetch.")
-            elif ref.get("desired", False):
-                logger.warning("Desired reference '%s' could not be fetched from any URL. Skipping.", ref["refname"])
-            else:
-                logger.info("Optional reference '%s' could not be fetched. Skipping silently.", ref["refname"])
-    return collected_refs
 
 
 
-def apply_name_rules(kind, name, category):
-    for rule in NAME_RULES[kind][category]: # Locate valid rules
-        if rule.when(name):                 # If NameRule can be applied, do so.
-            return rule.then(name)          # Get the NameRule-compliant name
-    return name                             # No "DEFAULT" NameRule was active
-
-
-     
-# >>> Aggregator Function
-def aggregate(cache_dir=None):
-    # Aggregation Setup
-    counter = UniqueCounter()
-    #dpg_members = inspect.getmembers(dpg)
-
-    raw_theming_items = collect_dpg_theming_items(dpg_members, id_counter=counter)
-    external_references = collect_external_refs(CONFIG["external_refs"], cache_dir=cache_dir)
-    
-    # raw_
-    # aggr_results = {
-    #     "styles": [],
-    #     "colors": [],
-    #     "widgets":[]
-    # }
-    return {
-        "raws": raw_theming_items, 
-        "refs": external_references,
-    }
 
 
 
-# >>> Auto Aggregator Function
+
+
+
+
+
+
+
+from legacy import prefix_pattern_maker, get_style_uses_pixels, tables, color_name_conversion_table
+# >>> Auto Aggregator Function (LEGACY)
 def auto_aggregate(cache_dir=None):
     # Prefix REGEX patterns for colors and styles
     color_re_pattern, style_re_pattern = (prefix_pattern_maker([subitem['prefix'] for subitem in tables[tname]]) for tname in ('color','style'))
@@ -467,7 +369,7 @@ def auto_aggregate(cache_dir=None):
             for table_row in tables[ (object_kind := "style") ]:
                 if item_name.startswith(prefix := table_row["prefix"]):
                     imname_item_name = item_name.removeprefix(prefix)
-                    kebab_item_name  = to_kebab_case(imname_item_name)
+                    kebab_item_name  = pascal_to_kebab_case(imname_item_name)
                     category = table_row["category"]
                     num_args = get_style_num_args(imname_item_name, category, item_value)
 
@@ -492,7 +394,7 @@ def auto_aggregate(cache_dir=None):
             for table_row in tables[ (object_kind := "color") ]:
                 if item_name.startswith(prefix := table_row["prefix"]):
                     imname_item_name = item_name.removeprefix(prefix)
-                    kebab_item_name  = to_kebab_case(imname_item_name)
+                    kebab_item_name  = pascal_to_kebab_case(imname_item_name)
                     category = table_row["category"]
 
                     # Quick name adjustments, a name 'adjustment' WILL BE APPLIED NO MATTER WHAT, some adjustments MAKE NO REAL MODIFICATIONS
@@ -643,9 +545,9 @@ def auto_aggregate(cache_dir=None):
 
 
 __all__ = [
-    "to_kebab_case", "aggregate", "get_style_num_args", "prefix_pattern_maker",
+    "aggregate", "get_style_num_args",
     "STYLE_SPECS", "VALID_TYPES", "DOCSTRING_MAPS", 
-    "dpg_members", "tables", "color_name_conversion_table"
+    "dpg_members",
 
 ]
 
