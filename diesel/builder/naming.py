@@ -112,26 +112,31 @@ NAME_RULES = {
             ),
         ],
     },
-    "item": {
+    "entity": {
         CAT_CORE: [
+            NameRule(
+                when=lambda name: name.startswith("window-"),
+                then=lambda name: 'window',
+                note="Replaces mvWindowAppItem as if it was called mvWindow",
+            ),
             NameRule(
                 when=lambda name: True,                 # NOTE: Default Rule
                 then=lambda name: name,
-                note="Core widgets are unchanged",
+                note="Core entities are mostly unchanged",
             ),
         ],
         CAT_PLOT: [
             NameRule(
                 when=lambda name: True,                 # NOTE: Default Rule
                 then=lambda name: name,
-                note="Plot widgets are unchanged",
+                note="Plot entities are unchanged",
             ),
         ],
         CAT_NODE: [
             NameRule(
                 when=lambda name: True,                 # NOTE: Default Rule
                 then=lambda name: name,
-                note="Node widgets are unchanged",
+                note="Node entities are unchanged",
             ),
         ],
     },

@@ -1,0 +1,9 @@
+# diesel/__init__.pyi
+
+from typing import Any
+from dearpygui.dearpygui import *
+
+def is_context_active() -> bool: ...
+def hello_diesel() -> str: ...
+
+def __getattr__(name: str) -> Any: ...

@@ -123,6 +123,9 @@ class UniqueCounter:
     - `get_next`: returns the current counter value and increments the counter
     - `get_counter`: returns the current counter value
     - `reset_counter`: resets the counter value to 0
+
+    Args:
+        start: The integer to start counting at.
     """
     def __init__(self, start=0):
         """ Initializes a new `UniqueCounter` with a initial count of `start`. """
@@ -138,9 +141,9 @@ class UniqueCounter:
         """ Returns the current integer count. """
         return self._counter
 
-    def reset_counter(self, num=0) -> None:
-        """ Resets the integer count value to `num`. """
-        self._counter = num
+    def reset_counter(self, start=0) -> None:
+        """ Resets the integer count value to `start`. """
+        self._counter = start
 
 
 

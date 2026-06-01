@@ -20,8 +20,9 @@ DEFAULT_ENGINE_OUTPUT_PATH = DEFAULT_OUTPUT_DIR / "engine.txt"
 
 
 # >>> Aggregator Config
+
 AGGREGATOR_CONFIG = {
-    "theming_prefix_dict": {
+    "modifier_prefix_dict": {
         # PREFIX            # KIND   # CATEGORY
         "mvStyleVar_":      ("style", 0),
         "mvPlotStyleVar_":  ("style", 1),
@@ -108,4 +109,6 @@ AGGREGATOR_CONFIG = {
         },
     ]
 }
-item_funcs_regex = r"[ \t]*case[ \t]+mvAppItemType::([a-zA-Z0-9]+):[ \t]*return[ \t]+\"([a-zA-Z0-9_]+)\";?"
+
+item_funcs_rgx = r"[ \t]*case[ \t]+mvAppItemType::([a-zA-Z0-9]+):[ \t]*return[ \t]+\"([a-zA-Z0-9_]+)\";?"
+entity_ref_rgx = r"X\(\s*(mv[a-zA-Z0-9]+)\s*\)"   # Used to extract the names from `mvAppItemType.inc`

@@ -1,45 +1,76 @@
 # diesel/__init__.py
-import dearpygui.dearpygui as dpg
+from __future__ import annotations
+
+import functools
+import inspect
+from typing import Any, Callable
+import dearpygui.dearpygui as _dpg
 import functools
 import inspect
 
-__INTERNAL_CONTEXT_ACTIVE = False
+_CONTEXT_ACTIVE = False
+_WRAPPER_CACHE: dict[str, Callable[..., Any]] = {}
 
-def __wrap_callable(name, func):
-    """Dynamically wraps a callable to perform pre-call operations."""
+# >>> Diesel Public Functions
+
+def is_context_active() -> bool:
+    return _CONTEXT_ACTIVE
+
+
+def hello_diesel() -> str:
+    return "Hello from Diesel"
+
+
+_DIESEL_EXPORTS = [
+    "is_context_active",
+    "hello_diesel",
+]
+
+def _wrap_callable(name: str, func: Callable[..., Any]) -> Callable[..., Any]:
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        # Pre-call operations
-        print(f"[Diesel Pre-Call] About to call '{name}' with args={args} kwargs={kwargs}")
-        # You can add any logic here before the call.
-        if name == "create_context":
-            global __INTERNAL_CONTEXT_ACTIVE
-            __INTERNAL_CONTEXT_ACTIVE = True
-        elif name == "destroy_context":
-            global __INTERNAL_CONTEXT_ACTIVE
-            __INTERNAL_CONTEXT_ACTIVE = False
-        # Call the underlying function
-        result = func(*args, **kwargs)
-        
-        # Optionally, add post-call operations here.
-        return result
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        global _CONTEXT_ACTIVE
 
-    # Preserve the original signature
-    wrapper.__signature__ = inspect.signature(func)                                     # type: ignore
+        if name == "create_context":
+            _CONTEXT_ACTIVE = True
+        elif name == "destroy_context":
+            _CONTEXT_ACTIVE = False
+
+        return func(*args, **kwargs)
+
+    try:
+        wrapper.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
+    except (TypeError, ValueError):
+        pass
+
     return wrapper
 
-def __getattr__(name):
+
+def __getattr__(name: str) -> Any:
     """
-    Module-level __getattr__ intercepts attribute lookups.
-    If the attribute is callable, we wrap it dynamically;
-    otherwise, we return it directly.
+    Dynamically expose Dear PyGui attributes through Diesel.
+
+    If the Dear PyGui attribute is callable, Diesel returns a wrapped version
+    so pre-call behavior can run before the original function.
+    Non-callable attributes are returned directly.
     """
-    attr = getattr(dpg, name)
-    if callable(attr):
-        # Return a dynamically wrapped version
-        return __wrap_callable(name, attr)
-    else:
+    attr = getattr(_dpg, name)
+
+    if not callable(attr):
         return attr
 
-# Optionally, define __all__ to export all attributes from dpg
-__all__ = dir(dpg)                                                                      # type: ignore
+    cached = _WRAPPER_CACHE.get(name)
+    if cached is not None:
+        return cached
+
+    wrapped = _wrap_callable(name, attr)
+    _WRAPPER_CACHE[name] = wrapped
+    return wrapped
+
+
+_DPG_EXPORTS = [name for name in dir(_dpg) if not name.startswith("_")]
+
+__all__ = [             # type: ignore
+    *_DIESEL_EXPORTS,
+    *_DPG_EXPORTS,
+]

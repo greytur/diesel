@@ -11,19 +11,23 @@ import uuid
 import sys
 import os
 import re
-# >> Local Imports
+
+# ===== LOCAL IMPORTS =====
 from tools import *
 from builder.naming import *
-from config import AGGREGATOR_CONFIG
+from config import AGGREGATOR_CONFIG, entity_ref_rgx
+from engine.dpg_item_classifier import *
+
 # ===== SIMPLE SETUP =====
-logger = get_logger(level=logging.INFO)
-dpg_members = inspect.getmembers(dpg)
+logger              = get_logger(level=logging.INFO)
+dpg_members         = inspect.getmembers(dpg)
+entity_ref_pattern  = re.compile(entity_ref_rgx)
 
 # ===== CONSTANTS =====
-THEMING_PREFIX_DICT = AGGREGATOR_CONFIG["theming_prefix_dict"]
-EXTERNAL_REFERENCES = AGGREGATOR_CONFIG["external_references"]
-# ===== GENERIC UTILITIES =====
+MODIFIER_PREFIX_DICT    = AGGREGATOR_CONFIG["modifier_prefix_dict"]
+EXTERNAL_REFERENCES     = AGGREGATOR_CONFIG["external_references"]
 
+# ===== GENERIC UTILITIES =====
 def get_style_num_args(im_name: str, category: int, item_value: int) -> int:
     """ Returns the number of arguments a DearPyGUI Style will use`[1 OR 2]` """
     if category == 0: # mvStyleVar 
@@ -36,21 +40,21 @@ def get_style_num_args(im_name: str, category: int, item_value: int) -> int:
 
 # >>> Aggregator Functions
 def resolve_dpg_item(name):
-    for prefix, (kind, category) in THEMING_PREFIX_DICT.items():
+    for prefix, (kind, category) in MODIFIER_PREFIX_DICT.items():
         if name.startswith(prefix):
             im_name = name.removeprefix(prefix)         #kebab_name = to_kebab_case(im_name)
             return kind, category, im_name              #, kebab_name
     return None
 
 def build_item_record(
-        kind: str, item_name: str, dsl_name:str, im_name: str,
+        kind: str, dpg_name: str, dsl_name:str, im_name: str,
         item_value: int, category: int, 
         id_counter: UniqueCounter
     ):
     """ Builds a record for a DPG item. """
     return {
         "kind":         kind,
-        "dpg":          item_name,
+        "dpg":          dpg_name,
         "dsl":          dsl_name,
         "im_name":      im_name,
         "idnum":        id_counter.get_next(),
@@ -77,7 +81,7 @@ def collect_dpg_theming_items(dpg_members: Any, id_counter: UniqueCounter):
         # Build raw item record
         raw_record = build_item_record(
             kind=kind,
-            item_name=dpg_name,
+            dpg_name=dpg_name,
             dsl_name=dsl_name,
             im_name=im_name,
             item_value=value,
@@ -87,7 +91,7 @@ def collect_dpg_theming_items(dpg_members: Any, id_counter: UniqueCounter):
         dpg_items[kind].append(raw_record)
     return dpg_items
 
-def collect_external_refs(external_refs, cache_dir=None):
+def collect_external_refs(external_refs, cache_dir=None) -> dict:
     """ Collects external references from a cache directory or using the URLs from `external_refs` """
     collected_refs = {}
     is_cache_stable = True if (isinstance(cache_dir, str)) else False  # Used to toggle caching, mainly from NotADirectoryError and FileNotFoundError
@@ -189,7 +193,7 @@ def collect_dpg_items(dpg_members: Any, id_counter: UniqueCounter, external_refe
         dsl_name = apply_naming_rules(im_name, kind, category)
         raw_record = build_item_record(
             kind="item",
-            item_name=item,
+            dpg_name=item,
             im_name=im_name,
             dsl_name=dsl_name,
             item_value=(item_index + 1),
@@ -200,10 +204,10 @@ def collect_dpg_items(dpg_members: Any, id_counter: UniqueCounter, external_refe
     return dpg_items
 
 
-def apply_naming_rules(name, kind, category):
+def apply_naming_rules(name, scope, category):
     # Handle any preprocessing required (all naming information is passed by default)
-    name = PREPROCESSOR_FUNCTION(name, kind, category) 
-    for rule in NAME_RULES[kind][category]: # Locate valid rules
+    name = PREPROCESSOR_FUNCTION(name, scope, category) 
+    for rule in NAME_RULES[scope][category]: # Locate valid rules
         if rule.when(name):                 # If NameRule can be applied, do so.
             return rule.then(name)          # Get the NameRule-compliant name
     return name                             # No "DEFAULT" NameRule was active
@@ -227,8 +231,178 @@ def aggregate(cache_dir=None):
 
 
 
+def collect_dpg_theming_items2(dpg_members: Any, id_counter: UniqueCounter):
+    dpg_items = { "style": [], "color": [] }
+    for dpg_name, value in dpg_members:
+        # Resolve the information from the name
+        result = resolve_dpg_item(name=dpg_name)
+        if not result:
+            continue
+        kind, category, im_name = result                #, kebab_name
+        # Get the DSL Name
+        dsl_name = apply_naming_rules(im_name, kind, category)
+        # Build raw item record
+        raw_record = build_item_record(
+            kind=kind,
+            dpg_name=dpg_name,
+            dsl_name=dsl_name,
+            im_name=im_name,
+            item_value=value,
+            category=category,
+            id_counter=id_counter
+        )
+        dpg_items[kind].append(raw_record)
 
 
+    pattern = re.compile(r"X\(\s*(mv[a-zA-Z0-9]+)\s*\)")
+    item_types = pattern.findall(external_references["mvAppItemTypes.inc"])
+    
+    dpg_items = { "item": [] }
+    for item_index, item in enumerate(item_types):
+        kind = "item"
+        im_name = item.removeprefix('mv')
+        category = 0
+        dsl_name = apply_naming_rules(im_name, kind, category)
+        raw_record = build_item_record(
+            kind="item",
+            dpg_name=item,
+            im_name=im_name,
+            dsl_name=dsl_name,
+            item_value=(item_index + 1),
+            category=category,
+            id_counter=id_counter
+        )
+        dpg_items[kind].append(raw_record)
+    return dpg_items
+    return dpg_items
+
+
+# >>> Aggregator Functions
+def resolve_dpg_item(name):
+    for prefix, (kind, category) in MODIFIER_PREFIX_DICT.items():
+        if name.startswith(prefix):
+            im_name = name.removeprefix(prefix)         #kebab_name = to_kebab_case(im_name)
+            return kind, category, im_name              #, kebab_name
+    return None
+
+modifier_prefix_dict = {
+        # PREFIX            # KIND   # CATEGORY
+        "mvStyleVar_":      ("style", 0),
+        "mvPlotStyleVar_":  ("style", 1),
+        "mvNodeStyleVar_":  ("style", 2),
+        "mvNodesStyleVar_": ("style", 2),
+        "mvThemeCol_":      ("color", 0),
+        "mvPlotCol_":       ("color", 1),
+        "mvNodeCol_":       ("color", 2),
+        "mvNodesCol_":      ("color", 2),
+    }
+
+def collect_member_records(members: list[tuple[str, Any]], counter: UniqueCounter, references: dict):
+    
+    
+    members_dict = {k: v for (k, v) in members}
+    modifier_prefix_dict = {
+        # PREFIX            # KIND   # CATEGORY
+        "mvStyleVar_":      ("style", 0),
+        "mvPlotStyleVar_":  ("style", 1),
+        "mvNodeStyleVar_":  ("style", 2),
+        "mvNodesStyleVar_": ("style", 2),
+        "mvThemeCol_":      ("color", 0),
+        "mvPlotCol_":       ("color", 1),
+        "mvNodeCol_":       ("color", 2),
+        "mvNodesCol_":      ("color", 2),
+    }
+
+    # Extract mvAppItemType names from mvAppItemTypes.inc-style source.
+    entity_names = entity_ref_pattern.findall(references["mvAppItemTypes.inc"])
+    
+    records = {
+        "modifier": {
+            "style": [], "color": [],
+        },
+        "entity": {
+            "handler": [], "registry": [],
+            "value":   [], "asset":    [],
+            "theming": [], "element":  [],
+            "special": []
+        }
+    }
+    
+    for name, value in members:
+        for prefix, (domain, category) in modifier_prefix_dict.items():
+            if name.startswith(prefix):
+                kind     = "modifier"
+                im_name  = name.removeprefix(prefix)
+                dsl_name = apply_naming_rules(im_name, domain, category)
+                records[kind][domain].append({
+                    "kind":         kind,
+                    "domain":       domain,
+                    "dpg":          name,
+                    "dsl":          dsl_name,
+                    "im_name":      im_name,
+                    "idnum":        counter.get_next(),
+                    "category":     category,
+                    "dpg_value":    value,
+                    ""
+                })
+
+
+
+def aggregator(cache_dir=None):
+    # Basic Aggregation Setup
+    id_counter   = UniqueCounter(start=1)     # NOTE: Skips 0 because it is reserved for mvAll
+    references = collect_external_refs(
+        external_refs=EXTERNAL_REFERENCES, 
+        cache_dir=cache_dir
+    )
+
+    member_records = collect_member_records(
+        members=dpg_members, 
+        counter=id_counter,
+        references=references
+    )
+
+    modifiers = {
+        "styles": [], "colors": [],
+    }
+    entities = {
+        "handler": [], "registry": [],
+        "value":   [], "asset":    [],
+        "theming": [], "element":  [],
+        "special": []
+    }
+
+
+
+
+
+
+def compose_member_record(
+        kind: str, item_name: str, dsl_name:str, im_name: str,
+        item_value: int, category: int, 
+        id_counter: UniqueCounter
+    ):
+    """ Builds a record for a DPG item. """
+    return {
+        "kind":         "entity"|"modifier",
+        "domain":       domain,
+        "dpg":          item_name,
+        "dsl":          dsl_name,
+        "im_name":      im_name,
+        "idnum":        id_counter.get_next(),
+        "category":     category,
+        "dpg_value":    item_value,
+        "meta": {
+            "docstring":    None,   # ALL
+        },
+        "traits": { 
+            "value_type":   None, # If style
+            "default":      None, # If color/style
+            "dimension":    None, # If entity
+            "source":       None, # If entity
+            "role":         None, # If entity 
+        }
+    }
 
 
 
