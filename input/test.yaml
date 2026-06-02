@@ -2,8 +2,10 @@ $themes:
   $global:
     $default:
       text-color: rgb(255, 255, 255)
+      window-padding: [10, 0]
     text:
-      text-color: rgba(255, 255, 255, 255)
+      text-color: rgba(255, 0, 255, 255)
+      
   iojoij:
     $default:
       text-color: rgb(25, 10, 255)
@@ -11,7 +13,7 @@ $themes:
       text-color: rgba(255, 40, 255, 255)
     button:
       window-padding: [10, 21]
-      button-color: hex #ffffffff
+      button-color: rgba(255, 40, 255, 255)
 
 
 #(#RGB, #RGBA, #RRGGBB or #RRGGBBAA)

@@ -106,7 +106,7 @@ def build_lookup_table(
     raws = metadata.get("raws", {})
 
     component_records = (
-        raws.get("item")
+        raws.get("entity")
         or raws.get("widget")
         or raws.get("component")
         or []
@@ -180,6 +180,7 @@ def require_component_meta(
     lookup: LookupTable,
 ) -> dict[str, Any]:
     try:
+        print("COMP", component_name)
         return lookup["component"][component_name]
     except KeyError as exc:
         raise InvalidComponentError(
@@ -383,7 +384,7 @@ def compile_theme_property(
 ) -> Any:
     property_meta = require_theme_property_meta(property_name, lookup)
     property_kind = property_meta["kind"]
-
+    print("COMPILE: ", property_kind, property_meta)
     if property_kind == "style":
         style_kwargs = normalize_style_value(
             property_name=property_name,
@@ -428,6 +429,10 @@ def run_engine_direct(
     result = compile_dsl_config(config, lookup)
 
     save_json(Path(output_path), result, indent=2)
+    
+    from .exporter import sample_program
+    dpg.bind_theme("$global")
+    sample_program()
     return result
 
 

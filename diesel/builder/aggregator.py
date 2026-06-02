@@ -38,13 +38,13 @@ def get_style_num_args(im_name: str, category: int, item_value: int) -> int:
             return 2 
     return 1 # mvNode(s)StyleVar & Remaining
 
-# >>> Aggregator Functions
-def resolve_dpg_item(name):
-    for prefix, (kind, category) in MODIFIER_PREFIX_DICT.items():
-        if name.startswith(prefix):
-            im_name = name.removeprefix(prefix)         #kebab_name = to_kebab_case(im_name)
-            return kind, category, im_name              #, kebab_name
-    return None
+# # >>> Aggregator Functions
+# def resolve_dpg_item(name):
+#     for prefix, (kind, category) in MODIFIER_PREFIX_DICT.items():
+#         if name.startswith(prefix):
+#             im_name = name.removeprefix(prefix)         #kebab_name = to_kebab_case(im_name)
+#             return kind, category, im_name              #, kebab_name
+#     return None
 
 def build_item_record(
         kind: str, dpg_name: str, dsl_name:str, im_name: str,
@@ -185,14 +185,14 @@ def collect_dpg_items(dpg_members: Any, id_counter: UniqueCounter, external_refe
     pattern = re.compile(r"X\(\s*(mv[a-zA-Z0-9]+)\s*\)")
     item_types = pattern.findall(external_references["mvAppItemTypes.inc"])
     
-    dpg_items = { "item": [] }
+    dpg_items = { "entity": [] }
     for item_index, item in enumerate(item_types):
-        kind = "item"
+        kind = "entity"
         im_name = item.removeprefix('mv')
         category = 0
         dsl_name = apply_naming_rules(im_name, kind, category)
         raw_record = build_item_record(
-            kind="item",
+            kind="entity",
             dpg_name=item,
             im_name=im_name,
             dsl_name=dsl_name,
@@ -255,7 +255,7 @@ def collect_dpg_theming_items2(dpg_members: Any, id_counter: UniqueCounter):
 
 
     pattern = re.compile(r"X\(\s*(mv[a-zA-Z0-9]+)\s*\)")
-    item_types = pattern.findall(external_references["mvAppItemTypes.inc"])
+    item_types = pattern.findall(EXTERNAL_REFERENCES["mvAppItemTypes.inc"])
     
     dpg_items = { "item": [] }
     for item_index, item in enumerate(item_types):
@@ -343,7 +343,7 @@ def collect_member_records(members: list[tuple[str, Any]], counter: UniqueCounte
                     "idnum":        counter.get_next(),
                     "category":     category,
                     "dpg_value":    value,
-                    ""
+                    
                 })
 
 
@@ -377,32 +377,32 @@ def aggregator(cache_dir=None):
 
 
 
-def compose_member_record(
-        kind: str, item_name: str, dsl_name:str, im_name: str,
-        item_value: int, category: int, 
-        id_counter: UniqueCounter
-    ):
-    """ Builds a record for a DPG item. """
-    return {
-        "kind":         "entity"|"modifier",
-        "domain":       domain,
-        "dpg":          item_name,
-        "dsl":          dsl_name,
-        "im_name":      im_name,
-        "idnum":        id_counter.get_next(),
-        "category":     category,
-        "dpg_value":    item_value,
-        "meta": {
-            "docstring":    None,   # ALL
-        },
-        "traits": { 
-            "value_type":   None, # If style
-            "default":      None, # If color/style
-            "dimension":    None, # If entity
-            "source":       None, # If entity
-            "role":         None, # If entity 
-        }
-    }
+# def compose_member_record(
+#         kind: str, item_name: str, dsl_name:str, im_name: str,
+#         item_value: int, category: int, 
+#         id_counter: UniqueCounter
+#     ):
+#     """ Builds a record for a DPG item. """
+#     return {
+#         "kind":         "entity"|"modifier",
+#         "domain":       domain,
+#         "dpg":          item_name,
+#         "dsl":          dsl_name,
+#         "im_name":      im_name,
+#         "idnum":        id_counter.get_next(),
+#         "category":     category,
+#         "dpg_value":    item_value,
+#         "meta": {
+#             "docstring":    None,   # ALL
+#         },
+#         "traits": { 
+#             "value_type":   None, # If style
+#             "default":      None, # If color/style
+#             "dimension":    None, # If entity
+#             "source":       None, # If entity
+#             "role":         None, # If entity 
+#         }
+#     }
 
 
 
